@@ -1,3 +1,4 @@
+import os
 from functools import wraps
 from flask import Flask, render_template, redirect, url_for, request, flash, abort, g
 from flask_bootstrap import Bootstrap
@@ -11,7 +12,7 @@ from flask_login import UserMixin, login_user, LoginManager, current_user, logou
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'pass'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL",  "sqlite:///users.db")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 Bootstrap(app)
