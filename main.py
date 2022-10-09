@@ -7,13 +7,19 @@ from flask_wtf import FlaskForm
 from sqlalchemy.orm import relationship
 from werkzeug.security import generate_password_hash, check_password_hash
 from wtforms import StringField, SubmitField, PasswordField, EmailField
+from flask_wtf.file import FileField, FileRequired
 from wtforms.validators import DataRequired, URL
 from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user, login_required
+from werkzeug.utils import secure_filename
+
+UPLOAD_FOLDER = 'static/item_image'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'pass'
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL",  "sqlite:///users.db")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 db = SQLAlchemy(app)
 Bootstrap(app)
 
@@ -53,7 +59,8 @@ class AddItem(FlaskForm):
     id = db.Column(db.Integer, primary_key=True)
     item_name = StringField('Item Name', validators=[DataRequired()])
     amount = StringField('Amount', validators=[DataRequired()])
-    img_url = StringField('Image Url', validators=[DataRequired(), URL()])
+    file = FileField('File', validators=[FileRequired()])
+    # img_url = StringField('Image Url', validators=[DataRequired(), URL()])
     submit = SubmitField('Add Item')
 
 
@@ -154,24 +161,43 @@ def login():
     return render_template('login.html', form=signup_form, logged_in=current_user.is_authenticated)
 
 
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
 @app.route("/add_item", methods=["GET", "POST"])
 @login_required
 @admin_only
 def add_item():
     form = AddItem()
-    if request.method == "POST":
-        item_name = request.form.get('item_name')
-        amount = request.form.get('amount')
-        img_url = request.form.get('img_url')
+    item_name = request.form.get('item_name')
+    amount = request.form.get('amount')
 
-        new_item = Item(
-            item_name=item_name,
-            amount=amount,
-            img_url=img_url,
-        )
-        db.session.add(new_item)
-        db.session.commit()
-        return redirect(url_for('shop'))
+    if request.method == 'POST':
+        # check if the post request has the file part
+        if 'file' not in request.files:
+            flash('No file part')
+            return redirect(request.url)
+        file = request.files.get('file')
+        # file = form.file.data
+        # If the user does not select a file, the browser submits an
+        # empty file without a filename.
+        if file.filename == '':
+            flash('No selected file')
+            return redirect(request.url)
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+
+            new_item = Item(
+                item_name=item_name,
+                amount=amount,
+                img_url=file_path,
+            )
+            db.session.add(new_item)
+            db.session.commit()
+            return redirect(url_for('shop'))
     return render_template("add_item.html", form=form, current_user=current_user)
 
 
