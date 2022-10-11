@@ -1,4 +1,5 @@
 import os
+import random
 from functools import wraps
 from flask import Flask, render_template, redirect, url_for, request, flash, abort, g
 from flask_bootstrap import Bootstrap
@@ -6,7 +7,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import FlaskForm
 from sqlalchemy.orm import relationship
 from werkzeug.security import generate_password_hash, check_password_hash
-from wtforms import StringField, SubmitField, PasswordField, EmailField
+from wtforms import StringField, SubmitField, PasswordField, EmailField, TextAreaField
 from flask_wtf.file import FileField, FileRequired
 from wtforms.validators import DataRequired, URL
 from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user, login_required
@@ -59,8 +60,8 @@ class AddItem(FlaskForm):
     id = db.Column(db.Integer, primary_key=True)
     item_name = StringField('Item Name', validators=[DataRequired()])
     amount = StringField('Amount', validators=[DataRequired()])
+    item_description = TextAreaField('Item Description', render_kw={"rows": 10, "cols": 11}, validators=[DataRequired()])
     file = FileField('File', validators=[FileRequired()])
-    # img_url = StringField('Image Url', validators=[DataRequired(), URL()])
     submit = SubmitField('Add Item')
 
 
@@ -82,6 +83,7 @@ class Item(db.Model):
     item_name = db.Column(db.String(250),  nullable=False)
     amount = db.Column(db.Integer, nullable=False)
     img_url = db.Column(db.String(250), nullable=False)
+    item_description = db.Column(db.String(100), nullable=False)
 
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
 
@@ -105,8 +107,9 @@ db.create_all()
 
 @app.route("/")
 def home():
-
-    return render_template("index.html", logged_in=current_user.is_authenticated)
+    all_items = db.session.query(Item).all()
+    display = random.sample(all_items, 3)
+    return render_template("index.html", items=display, logged_in=current_user.is_authenticated)
 
 
 @app.route("/sign_up", methods=['GET', 'POST'])
@@ -139,7 +142,6 @@ def sign_up():
 @app.route("/login", methods=['GET', 'POST'])
 def login():
     signup_form = SignUp()
-
     if request.method == "POST":
 
         email = request.form.get('email')
@@ -172,6 +174,7 @@ def add_item():
     form = AddItem()
     item_name = request.form.get('item_name')
     amount = request.form.get('amount')
+    description = request.form.get('item_description')
 
     if request.method == 'POST':
         # check if the post request has the file part
@@ -179,7 +182,6 @@ def add_item():
             flash('No file part')
             return redirect(request.url)
         file = request.files.get('file')
-        # file = form.file.data
         # If the user does not select a file, the browser submits an
         # empty file without a filename.
         if file.filename == '':
@@ -194,6 +196,7 @@ def add_item():
                 item_name=item_name,
                 amount=amount,
                 img_url=file_path,
+                item_description=description,
             )
             db.session.add(new_item)
             db.session.commit()
@@ -201,7 +204,7 @@ def add_item():
     return render_template("add_item.html", form=form, current_user=current_user)
 
 
-@app.route("/delete_item")
+@app.route("/delete_cart_item")
 @login_required
 @admin_only
 def delete_cart_item():
@@ -210,6 +213,26 @@ def delete_cart_item():
     db.session.delete(cart_item_to_delete)
     db.session.commit()
     return redirect(url_for('cart'))
+
+
+@app.route("/delete_item")
+@login_required
+@admin_only
+def delete_item():
+    item_id = request.args.get('id')
+    item_to_delete = Item.query.get(item_id)
+    db.session.delete(item_to_delete)
+    db.session.commit()
+    return redirect(url_for('shop'))
+
+
+@app.route("/item",  methods=["GET", "POST"])
+def individual_item():
+    item_id = request.args.get('id')
+    item_clicked = Item.query.get(item_id)
+
+    return render_template("individual_item.html", item=item_clicked, current_user=current_user,
+                           logged_in=current_user.is_authenticated)
 
 
 @app.route("/cart", methods=["GET", "POST"])
@@ -237,7 +260,7 @@ def cart():
         )
         db.session.add(add_to_cart)
         db.session.commit()
-        return render_template("cart.html")
+        return redirect(request.url)
 
     return render_template("cart.html", items_added=all_items_in_cart, current_user=current_user,
                            logged_in=current_user.is_authenticated, total_amount=total_amount)
@@ -249,27 +272,12 @@ def make_payment():
     user_email = current_user.email
     total_amount = request.args.get('total_amount')
 
-    return render_template("payment.html")
+    return render_template("payment.html", total_amount=total_amount)
 
 
 @app.route("/contact")
 def contact():
     return render_template("contact.html", logged_in=current_user.is_authenticated)
-
-
-@app.route("/blog")
-def blog():
-    return render_template("blog.html", logged_in=current_user.is_authenticated)
-
-
-@app.route("/services")
-def services():
-    return render_template("services.html", logged_in=current_user.is_authenticated)
-
-
-@app.route("/about")
-def about():
-    return render_template("about.html", logged_in=current_user.is_authenticated)
 
 
 @app.route("/shop")
