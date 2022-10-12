@@ -275,6 +275,13 @@ def make_payment():
     return render_template("payment.html", total_amount=total_amount)
 
 
+@app.route("/thank_you")
+@login_required
+def thank_you():
+    transaction = request.args.get('transaction')
+    return render_template("thank_you.html", status=transaction)
+
+
 @app.route("/contact")
 def contact():
     return render_template("contact.html", logged_in=current_user.is_authenticated)
